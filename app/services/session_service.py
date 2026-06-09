@@ -83,35 +83,54 @@ def start_session(db: DBSession, session_id: int, user_id: int):
     return session
 
 
-def complete_session(db: DBSession, session_id: int, user_id: int):
-
+def complete_session(
+    db: DBSession,
+    session_id: int,
+    tutor_id: int
+):
     session = db.get(Session, session_id)
 
-    if session.tutor_id != user_id:
-        raise Exception("Only tutor")
+    if not session:
+        raise Exception("Session not found")
 
-    if session.status != "ongoing":
-        raise Exception("Not ongoing")
+    if session.tutor_id != tutor_id:
+        raise Exception("Only tutor can complete session")
+
+    if session.status != "started":
+        raise Exception("Session must be started first")
 
     learner = db.get(User, session.learner_id)
     tutor = db.get(User, session.tutor_id)
 
-    if learner.token_balance < TOKEN_PER_SESSION:
-        raise Exception("Insufficient tokens")
+    SESSION_COST = 10
 
-    learner.token_balance -= TOKEN_PER_SESSION
-    tutor.token_balance += TOKEN_PER_SESSION
+    if learner.token_balance < SESSION_COST:
+        raise Exception("Learner has insufficient tokens")
 
-    txn = TokenTransaction(
+    learner.token_balance -= SESSION_COST
+    tutor.token_balance += SESSION_COST
+
+    transaction = TokenTransaction(
         sender_id=learner.id,
         receiver_id=tutor.id,
-        amount=TOKEN_PER_SESSION,
-        session_id=session.id
+        session_id=session.id,
+        amount=SESSION_COST
     )
+
+    db.add(transaction)
 
     session.status = "completed"
 
-    db.add_all([learner, tutor, txn, session])
+    db.add(learner)
+    db.add(tutor)
+    db.add(session)
+
     db.commit()
 
-    return {"message": "completed"}
+    db.refresh(session)
+
+    return {
+        "message": "Session completed successfully",
+        "tokens_transferred": SESSION_COST,
+        "session_id": session.id
+    }

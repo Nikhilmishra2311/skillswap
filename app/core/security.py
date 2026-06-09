@@ -4,7 +4,7 @@ from passlib.context import CryptContext
 from app.core.config import SECRET_KEY, ALGORITHM
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
+ALGORITHM = "HS256"
 
 # Hash password
 def get_password_hash(password: str) -> str:
