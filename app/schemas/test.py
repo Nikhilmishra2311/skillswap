@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 
 class Answer(BaseModel):
@@ -8,5 +8,7 @@ class Answer(BaseModel):
 
 
 class SubmitTest(BaseModel):
-    topic_id: int
+    topic_id: Optional[int] = None
+    topic_name: Optional[str] = None
+    type: str
     answers: List[Answer]

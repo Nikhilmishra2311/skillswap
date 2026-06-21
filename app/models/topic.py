@@ -3,4 +3,4 @@ from typing import Optional
 
 class Topic(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
+    name: str = Field(unique=True)

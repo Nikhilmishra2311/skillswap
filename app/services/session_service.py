@@ -3,7 +3,7 @@ from app.models.session import Session
 from app.models.user import User
 from app.models.token_transaction import TokenTransaction
 from app.models.user_skill import UserSkill
-
+from app.models.topic import Topic 
 TOKEN_PER_SESSION = 10
 
 
@@ -35,13 +35,64 @@ def create_session(db: DBSession, tutor_id: int, topic_id: int, start_time):
     return session
 
 
-def get_available_sessions(db: DBSession, topic_id: int):
-    return db.exec(
-        select(Session).where(
-            Session.topic_id == topic_id,
-            Session.status == "open"
+
+
+def get_available_sessions(
+    db,
+    topic_id: int | None = None,
+    topic_name: str | None = None
+):
+
+    # 🔥 Topic name support
+    if topic_name:
+
+        topic = db.exec(
+            select(Topic).where(
+                Topic.name.ilike(topic_name)
+            )
+        ).first()
+
+        if not topic:
+            return []
+
+        topic_id = topic.id
+
+    query = select(Session).where(
+        Session.status == "open"
+    )
+
+    # 🔥 Filter only if topic provided
+    if topic_id:
+        query = query.where(
+            Session.topic_id == topic_id
         )
-    ).all()
+
+    sessions = db.exec(query).all()
+
+    result = []
+
+    for session in sessions:
+
+        tutor = db.get(
+            User,
+            session.tutor_id
+        )
+
+        topic = db.get(
+            Topic,
+            session.topic_id
+        )
+
+        result.append({
+            "session_id": session.id,
+            "topic": topic.name if topic else None,
+            "tutor_id": tutor.id if tutor else None,
+            "tutor_email": tutor.email if tutor else None,
+            "status": session.status,
+            "start_time": session.start_time
+        })
+
+    return result
 
 
 def book_session(db: DBSession, session_id: int, learner_id: int):
@@ -71,17 +122,22 @@ def start_session(db: DBSession, session_id: int, user_id: int):
 
     session = db.get(Session, session_id)
 
+    if not session:
+        raise Exception("Session not found")
+
     if session.tutor_id != user_id:
         raise Exception("Only tutor can start")
 
     if session.status != "booked":
-        raise Exception("Not ready")
+        raise Exception("Session not ready")
 
     session.status = "ongoing"
 
+    db.add(session)
     db.commit()
-    return session
+    db.refresh(session)
 
+    return session
 
 def complete_session(
     db: DBSession,
@@ -96,8 +152,11 @@ def complete_session(
     if session.tutor_id != tutor_id:
         raise Exception("Only tutor can complete session")
 
-    if session.status != "started":
-        raise Exception("Session must be started first")
+    if session.status != "ongoing":
+        raise Exception("Session must be ongoing first")
+
+    if session.learner_id is None:
+        raise Exception("No learner booked this session")
 
     learner = db.get(User, session.learner_id)
     tutor = db.get(User, session.tutor_id)
@@ -132,5 +191,7 @@ def complete_session(
     return {
         "message": "Session completed successfully",
         "tokens_transferred": SESSION_COST,
-        "session_id": session.id
+        "session_id": session.id,
+        "learner_balance": learner.token_balance,
+        "tutor_balance": tutor.token_balance
     }
