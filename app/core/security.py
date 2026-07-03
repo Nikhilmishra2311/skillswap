@@ -2,11 +2,7 @@ from datetime import datetime, timedelta
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 
-from app.core.config import (
-    SECRET_KEY,
-    ALGORITHM,
-    ACCESS_TOKEN_EXPIRE_MINUTES
-)
+from app.core.config import settings
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
@@ -39,15 +35,15 @@ def create_access_token(
         datetime.utcnow() + expires_delta
         if expires_delta
         else datetime.utcnow()
-        + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
     to_encode.update({"exp": expire})
 
     return jwt.encode(
         to_encode,
-        SECRET_KEY,
-        algorithm=ALGORITHM
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM
     )
 
 
@@ -61,8 +57,8 @@ def create_reset_token(email: str):
 
     return jwt.encode(
         to_encode,
-        SECRET_KEY,
-        algorithm=ALGORITHM
+        settings.SECRET_KEY,
+        algorithm=settings.ALGORITHM
     )
 
 
@@ -70,8 +66,8 @@ def verify_reset_token(token: str):
     try:
         payload = jwt.decode(
             token,
-            SECRET_KEY,
-            algorithms=[ALGORITHM]
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM]
         )
 
         return payload.get("sub")

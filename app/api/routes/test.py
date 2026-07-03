@@ -95,11 +95,34 @@ def submit_test(
     current_user=Depends(get_current_user)
 ):
 
+    topic_id = data.topic_id
+
+    if data.topic_name and not topic_id:
+        topic = db.exec(
+            select(Topic).where(
+                Topic.name.ilike(data.topic_name)
+            )
+        ).first()
+
+        if not topic:
+            raise HTTPException(
+                status_code=404,
+                detail="Topic not found"
+            )
+
+        topic_id = topic.id
+
+    if not topic_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide topic_id or topic_name"
+        )
+
     # Tutor check
     user_skill = db.exec(
         select(UserSkill).where(
             UserSkill.user_id == current_user.id,
-            UserSkill.topic_id == data.topic_id,
+            UserSkill.topic_id == topic_id,
             UserSkill.type == "teach"
         )
     ).first()
@@ -129,8 +152,9 @@ def submit_test(
     result = evaluate_test(
         db,
         current_user.id,
-        data.topic_id,
+        topic_id,
         level,
+        data.question_ids,
         data.answers
     )
 

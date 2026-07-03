@@ -1,24 +1,270 @@
-from fastapi import APIRouter, Depends
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    UploadFile,
+    File,
+    Form
+)
+
 from sqlmodel import Session
 
 from app.db.session import get_session
 from app.api.deps import get_current_user
-from app.services.profile_service import get_tutor_profile
 
-router = APIRouter(prefix="/profile", tags=["Profile"])
+from app.schemas.profile import ProfileUpdate
+from app.schemas.tutor_profile import (
+    TutorProfileCreate,
+    TutorProfileUpdate
+)
+from app.schemas.learner_profile import (
+    LearnerProfileCreate,
+    LearnerProfileUpdate
+)
 
+from app.services.profile_service import (
+    get_my_profile,
+    get_profile_by_user_id,
+    update_profile
+)
+
+from app.services.tutor_profile_service import (
+    create_tutor_profile,
+    get_tutor_profile,
+    update_tutor_profile
+)
+
+from app.services.learner_profile_service import (
+    create_learner_profile,
+    get_learner_profile,
+    update_learner_profile
+)
+
+import os
+import uuid
+
+
+router = APIRouter(
+    prefix="/profile",
+    tags=["Profile"]
+)
 
 @router.get("/me")
 def my_profile(
     db: Session = Depends(get_session),
-    current_user = Depends(get_current_user)
+    current_user=Depends(get_current_user)
 ):
-    return get_tutor_profile(db, current_user.id)
+
+    try:
+
+        return get_my_profile(
+            db,
+            current_user.id
+        )
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+    
 
 
 @router.get("/{user_id}")
-def view_profile(
+def public_profile(
     user_id: int,
     db: Session = Depends(get_session)
 ):
-    return get_tutor_profile(db, user_id)
+
+    try:
+
+        return get_profile_by_user_id(
+            db,
+            user_id
+        )
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=404,
+            detail=str(e)
+        )   
+    
+@router.put("/me")
+async def update_my_profile(
+
+    full_name: str | None = Form(None),
+    headline: str | None = Form(None),
+    bio: str | None = Form(None),
+    city: str | None = Form(None),
+    country: str | None = Form(None),
+    college: str | None = Form(None),
+    github_url: str | None = Form(None),
+    linkedin_url: str | None = Form(None),
+    website_url: str | None = Form(None),
+
+    photo: UploadFile | None = File(None),
+
+    db: Session = Depends(get_session),
+    current_user=Depends(get_current_user)
+
+):
+
+    profile_picture = None
+
+    if photo:
+
+        os.makedirs(
+            "uploads/profile_pictures",
+            exist_ok=True
+        )
+
+        extension = photo.filename.split(".")[-1]
+
+        filename = f"{uuid.uuid4()}.{extension}"
+
+        filepath = (
+            f"uploads/profile_pictures/{filename}"
+        )
+
+        with open(filepath, "wb") as buffer:
+
+            buffer.write(
+                await photo.read()
+            )
+
+        profile_picture = (
+            f"/media/profile_pictures/{filename}"
+        )
+
+    data = ProfileUpdate(
+
+        full_name=full_name,
+        headline=headline,
+        bio=bio,
+        city=city,
+        country=country,
+        college=college,
+        github_url=github_url,
+        linkedin_url=linkedin_url,
+        website_url=website_url
+
+    )
+
+    return update_profile(
+
+        db=db,
+        user_id=current_user.id,
+        data=data,
+        profile_picture=profile_picture
+
+    )
+
+
+@router.post("/tutor")
+def create_tutor(
+
+    data: TutorProfileCreate,
+
+    db: Session = Depends(get_session),
+
+    current_user=Depends(get_current_user)
+
+):
+
+    return create_tutor_profile(
+
+        db,
+        current_user.id,
+        data
+
+    )
+
+@router.get("/tutor")
+def tutor_profile(
+
+    db: Session = Depends(get_session),
+
+    current_user=Depends(get_current_user)
+
+):
+
+    return get_tutor_profile(
+
+        db,
+        current_user.id
+
+    )
+
+@router.put("/tutor")
+def update_tutor(
+
+    data: TutorProfileUpdate,
+
+    db: Session = Depends(get_session),
+
+    current_user=Depends(get_current_user)
+
+):
+
+    return update_tutor_profile(
+
+        db,
+        current_user.id,
+        data
+
+    )
+
+@router.post("/learner")
+def create_learner(
+
+    data: LearnerProfileCreate,
+
+    db: Session = Depends(get_session),
+
+    current_user=Depends(get_current_user)
+
+):
+
+    return create_learner_profile(
+
+        db,
+        current_user.id,
+        data
+
+    )
+
+@router.get("/learner")
+def learner_profile(
+
+    db: Session = Depends(get_session),
+
+    current_user=Depends(get_current_user)
+
+):
+
+    return get_learner_profile(
+
+        db,
+        current_user.id
+
+    )
+@router.put("/learner")
+def update_learner(
+
+    data: LearnerProfileUpdate,
+
+    db: Session = Depends(get_session),
+
+    current_user=Depends(get_current_user)
+
+):
+
+    return update_learner_profile(
+
+        db,
+        current_user.id,
+        data
+
+    )

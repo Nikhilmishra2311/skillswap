@@ -8,6 +8,7 @@ from app.services.matching_service import (
     find_tutors,
     my_topics_matches
 )
+
 router = APIRouter(
     prefix="/matching",
     tags=["Matching"]
@@ -27,6 +28,8 @@ def match_tutors(
         topic_id,
         topic_name
     )
+
+
 @router.get("/my-topics")
 def my_topic_matches(
     db: Session = Depends(get_session),

@@ -5,7 +5,8 @@ from app.models.topic import Topic
 
 from app.db.session import get_session
 from app.api.deps import get_current_user
-from app.services.user_skill_service import add_user_skill
+
+from app.services.user_skill_service import add_user_skill, remove_tutor_skill
 
 router = APIRouter(
     prefix="/user-skills",

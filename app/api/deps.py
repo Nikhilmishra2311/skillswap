@@ -2,8 +2,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import jwt
 from sqlmodel import Session, select
-
-from app.core.config import SECRET_KEY, ALGORITHM
+from app.core.config import settings
 from app.db.session import get_session
 from app.models.user import User
 
@@ -17,7 +16,7 @@ def get_current_user(
     token = credentials.credentials  # Extract token
 
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id = payload.get("sub")
 
         if user_id is None:
@@ -32,3 +31,14 @@ def get_current_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     return user
+
+def require_admin(current_user):
+
+    if current_user.role != "admin":
+
+        raise HTTPException(
+            status_code=403,
+            detail="Only admin can perform this action."
+        )
+
+    return current_user

@@ -3,6 +3,8 @@ from sqlmodel import select
 from app.models.user import User
 from app.models.topic import Topic
 from app.models.user_skill import UserSkill
+from app.models.availability import AvailabilitySlot
+
 
 def find_tutors(
     db,
@@ -11,6 +13,7 @@ def find_tutors(
     topic_name: str | None = None
 ):
 
+    # 🔥 Topic name support
     if topic_name:
 
         topic = db.exec(
@@ -40,21 +43,51 @@ def find_tutors(
 
     for skill in tutor_skills:
 
+        # learner khud tutor ho to skip
         if skill.user_id == learner_id:
             continue
 
-        tutor = db.get(User, skill.user_id)
+        tutor = db.get(
+            User,
+            skill.user_id
+        )
 
-        if tutor:
-            tutors.append({
-                "tutor_id": tutor.id,
-                "email": tutor.email,
-                "topic_id": skill.topic_id,
-                "level": skill.level,
-                "verified": skill.is_verified
-            })
+        if not tutor:
+            continue
+
+        topic = db.get(
+            Topic,
+            skill.topic_id
+        )
+
+        # 🔥 Tutor availability
+        availability = db.exec(
+            select(AvailabilitySlot).where(
+                AvailabilitySlot.user_id == tutor.id,
+                AvailabilitySlot.is_active == True
+            )
+        ).all()
+
+        tutors.append({
+            "tutor_id": tutor.id,
+            "email": tutor.email,
+            "topic_id": skill.topic_id,
+            "topic_name": topic.name if topic else None,
+            "level": skill.level,
+            "verified": skill.is_verified,
+
+            "availability": [
+                {
+                    "day": slot.day,
+                    "start_time": slot.start_time,
+                    "end_time": slot.end_time
+                }
+                for slot in availability
+            ]
+        })
 
     return tutors
+
 
 def my_topics_matches(
     db,
@@ -70,19 +103,62 @@ def my_topics_matches(
 
     result = []
 
-    for item in learner_topics:
+    for learner_skill in learner_topics:
 
-        tutors = db.exec(
+        topic = db.get(
+            Topic,
+            learner_skill.topic_id
+        )
+
+        tutor_skills = db.exec(
             select(UserSkill).where(
-                UserSkill.topic_id == item.topic_id,
+                UserSkill.topic_id == learner_skill.topic_id,
                 UserSkill.type == "teach",
                 UserSkill.is_verified == True
             )
         ).all()
 
+        formatted_tutors = []
+
+        for tutor_skill in tutor_skills:
+
+            if tutor_skill.user_id == learner_id:
+                continue
+
+            tutor = db.get(
+                User,
+                tutor_skill.user_id
+            )
+
+            if not tutor:
+                continue
+
+            availability = db.exec(
+                select(AvailabilitySlot).where(
+                    AvailabilitySlot.user_id == tutor.id,
+                    AvailabilitySlot.is_active == True
+                )
+            ).all()
+
+            formatted_tutors.append({
+                "tutor_id": tutor.id,
+                "email": tutor.email,
+                "level": tutor_skill.level,
+
+                "availability": [
+                    {
+                        "day": slot.day,
+                        "start_time": slot.start_time,
+                        "end_time": slot.end_time
+                    }
+                    for slot in availability
+                ]
+            })
+
         result.append({
-            "topic_id": item.topic_id,
-            "tutors": tutors
+            "topic_id": learner_skill.topic_id,
+            "topic_name": topic.name if topic else None,
+            "tutors": formatted_tutors
         })
 
     return result

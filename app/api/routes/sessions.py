@@ -1,15 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.models.session import Session
 from sqlmodel import Session as DBSession, select
-
+from datetime import datetime
 from app.models.topic import Topic  # 🔥 NEW
-
 from app.services.session_service import (
     complete_session,
     get_available_sessions,
     create_session,
     book_session,
-    start_session
+    start_session,
+    cancel_session,
+    get_my_created_sessions,
+    get_my_booked_sessions,
+    get_session_history,
+    get_session_details
 )
 
 from app.db.session import get_session
@@ -82,16 +86,19 @@ def create_session_api(
         )
 
     try:
+        start_time = datetime.combine(
+            data.session_date,
+            data.session_time
+        )
 
         return create_session(
             db,
             current_user.id,
-            topic_id,          # 🔥 NEW
-            data.start_time
+            topic_id,
+            start_time
         )
 
     except Exception as e:
-
         raise HTTPException(
             status_code=400,
             detail=str(e)
@@ -185,3 +192,102 @@ def complete_session_api(
             status_code=400,
             detail=str(e)
         )
+    
+
+
+# =====================================
+# Cancel Session
+# =====================================
+
+@router.post("/cancel/{session_id}")
+def cancel_session_api(
+    session_id: int,
+    db: DBSession = Depends(get_session),
+    current_user=Depends(get_current_user)
+):
+
+    try:
+
+        return cancel_session(
+            db,
+            session_id,
+            current_user.id
+        )
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+    
+# =====================================
+# My Created Sessions (Tutor)
+# =====================================
+
+@router.get("/my-created")
+def my_created_sessions_api(
+    db: DBSession = Depends(get_session),
+    current_user=Depends(get_current_user)
+):
+
+    return get_my_created_sessions(
+        db,
+        current_user.id
+    )
+
+# =====================================
+# My Booked Sessions (Learner)
+# =====================================
+
+@router.get("/my-booked")
+def my_booked_sessions_api(
+    db: DBSession = Depends(get_session),
+    current_user=Depends(get_current_user)
+):
+
+    return get_my_booked_sessions(
+        db,
+        current_user.id
+    )
+
+# =====================================
+# Session History
+# =====================================
+
+@router.get("/history")
+def session_history_api(
+    db: DBSession = Depends(get_session),
+    current_user=Depends(get_current_user)
+):
+
+    return get_session_history(
+        db,
+        current_user.id
+    )
+
+# =====================================
+# Session Details
+# =====================================
+
+@router.get("/{session_id}")
+def session_details_api(
+    session_id: int,
+    db: DBSession = Depends(get_session),
+    current_user=Depends(get_current_user)
+):
+
+    try:
+
+        return get_session_details(
+            db,
+            session_id
+        )
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=404,
+            detail=str(e)
+        )
+    

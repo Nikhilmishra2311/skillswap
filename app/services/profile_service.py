@@ -1,33 +1,72 @@
 from sqlmodel import Session, select
-from app.models.user import User
-from app.models.user_skill import UserSkill
-from app.models.topic import Topic
+
+from app.models.profile import Profile
 
 
-def get_tutor_profile(db: Session, user_id: int):
-    user = db.get(User, user_id)
+def get_my_profile(
+    db: Session,
+    user_id: int
+):
 
-    skills = db.exec(
-        select(UserSkill, Topic)
-        .join(Topic, UserSkill.topic_id == Topic.id)
-        .where(
-            UserSkill.user_id == user_id,
-            UserSkill.type == "teach"
+    profile = db.exec(
+        select(Profile).where(
+            Profile.user_id == user_id
         )
-    ).all()
+    ).first()
 
-    skill_list = []
+    if not profile:
+        raise Exception("Profile not found")
 
-    for user_skill, topic in skills:
-        skill_list.append({
-            "topic_name": topic.name,
-            "level": user_skill.level,
-            "is_verified": user_skill.is_verified
-        })
+    return profile
 
-    return {
-        "user_id": user.id,
-        "email": user.email,
-        "bio": user.bio,
-        "skills": skill_list
-    }
+
+def get_profile_by_user_id(
+    db: Session,
+    user_id: int
+):
+
+    profile = db.exec(
+        select(Profile).where(
+            Profile.user_id == user_id
+        )
+    ).first()
+
+    if not profile:
+        raise Exception("Profile not found")
+
+    return profile
+
+
+def update_profile(
+    db: Session,
+    user_id: int,
+    data,
+    profile_picture: str | None = None
+):
+
+    profile = db.exec(
+        select(Profile).where(
+            Profile.user_id == user_id
+        )
+    ).first()
+
+    if not profile:
+        raise Exception("Profile not found")
+
+    updates = data.model_dump(
+        exclude_unset=True
+    )
+
+    for key, value in updates.items():
+        setattr(profile, key, value)
+
+    if profile_picture:
+        profile.profile_picture = profile_picture
+
+    db.add(profile)
+
+    db.commit()
+
+    db.refresh(profile)
+
+    return profile

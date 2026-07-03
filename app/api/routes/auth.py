@@ -1,6 +1,8 @@
+import token
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
-
+from app.tasks.email_tasks import reset_password_email_task, welcome_email_task
 from app.db.session import get_session
 from app.schemas.user import (
     UserCreate,
@@ -29,14 +31,44 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # 🔐 Register
 @router.post("/register", response_model=Token)
-def register(user_data: UserCreate, db: Session = Depends(get_session)):
-    try:
-        user = create_user(db, user_data.email, user_data.password)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+def register(
+    user_data: UserCreate,
+    db: Session = Depends(get_session)
+):
 
-    token = create_access_token({"sub": str(user.id)})
-    return {"access_token": token, "token_type": "bearer"}
+    try:
+
+        user = create_user(
+    db,
+    user_data.full_name,
+    user_data.email,
+    user_data.password
+)
+
+        # ==========================================
+        # Send Welcome Email (Background)
+        # ==========================================
+
+        welcome_email_task.delay(
+    user.email,
+    user.full_name
+)
+
+    except ValueError as e:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
+
+    token = create_access_token(
+        {"sub": str(user.id)}
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
 
 
 # 🔐 Login
@@ -80,7 +112,14 @@ def forgot_password(email: str, db: Session = Depends(get_session)):
     token = create_reset_token(email)
 
     # In production → send email
-    return {"reset_token": token}
+    reset_password_email_task.delay(
+    email,
+    token
+)
+
+    return {
+    "message":"Password reset email sent."
+}
 
 
 # 🔑 Reset Password
