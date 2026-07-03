@@ -4,7 +4,7 @@ from app.models.user import User
 from app.models.token_transaction import TokenTransaction
 from app.models.user_skill import UserSkill
 from app.models.topic import Topic 
-from datetime import datetime
+from datetime import datetime, timezone
 from app.models.availability import AvailabilitySlot
 from app.tasks.notification_tasks import send_notification_task
 from app.tasks.email_tasks import (
@@ -28,10 +28,13 @@ def create_session(
     # Cannot create session in past
     # =====================================
 
-    if start_time <= datetime.utcnow():
-        raise Exception(
-            "Start time must be in the future."
-        )
+    now = datetime.now(timezone.utc)
+
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
+
+    if start_time <= now:
+       raise Exception("Start time must be in the future.")
 
     # =====================================
     # Availability Validation
@@ -165,7 +168,7 @@ def get_available_sessions(
     # (Later this will be moved to Celery)
     # =====================================
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     open_sessions = db.exec(
         select(Session).where(
@@ -424,12 +427,16 @@ def start_session(
     # Time Validation
     # =====================================
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
-    if now < session.start_time:
+    session_time = session.start_time
+    if session_time.tzinfo is None:
+       session_time = session_time.replace(tzinfo=timezone.utc)
+
+    if now < session_time:
         raise Exception(
-            "You cannot start the session before its scheduled time."
-        )
+        "You cannot start the session before its scheduled time."
+    )
 
     # =====================================
     # Start Session

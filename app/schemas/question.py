@@ -3,9 +3,13 @@ from typing import Optional
 from pydantic import BaseModel
 
 
+from typing import Optional
+
 class QuestionCreate(BaseModel):
 
-    topic_id: int
+    topic_id: Optional[int] = None
+
+    topic_name: Optional[str] = None
 
     level: str
 
@@ -25,6 +29,10 @@ class QuestionCreate(BaseModel):
 
 
 class QuestionUpdate(BaseModel):
+
+    topic_id: Optional[int] = None
+
+    topic_name: Optional[str] = None
 
     level: Optional[str] = None
 
@@ -47,7 +55,9 @@ class QuestionUpdate(BaseModel):
 
 class AIGenerateQuestions(BaseModel):
 
-    topic_id: int
+    topic_id: Optional[int] = None
+
+    topic_name: Optional[str] = None
 
     beginner_count: int = 0
 

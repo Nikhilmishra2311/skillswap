@@ -1,6 +1,6 @@
 import json
 import time
-
+import re
 import google.generativeai as genai
 
 from app.core.config import settings
@@ -103,43 +103,70 @@ You are an experienced Technical Interviewer.
 
 Generate interview-quality MCQs.
 
-Topic
+Topic:
 
 {topic}
 
 {guide}
 
-Generate
+Generate exactly:
 
-{beginner} Beginner
-
-{intermediate} Intermediate
-
-{advanced} Advanced
+- {beginner} Beginner questions
+- {intermediate} Intermediate questions
+- {advanced} Advanced questions
 
 Rules
 
 1. Cover maximum concepts.
-
 2. No duplicate questions.
-
 3. Four options only.
+4. Correct answer must be only A, B, C or D.
+5. Explanation is mandatory.
+6. Mix theoretical and scenario-based questions.
+7. Questions should be interview quality.
+8. Return ONLY valid JSON.
+9. No markdown.
+10. No comments.
+11. No numbering.
+12. No extra text.
+13. Do NOT wrap JSON inside ```json blocks.
+14. Do NOT return keys like:
+   - questions
+   - mcqs
+   - data
+   - beginner
+   - intermediate
+   - advanced
+15. Return ONLY a JSON ARRAY.
+16. Every object MUST follow EXACTLY this schema.
 
-4. Correct answer should be A/B/C/D.
+[
+    {{
+        "level": "beginner",
+        "question": "...",
+        "option_a": "...",
+        "option_b": "...",
+        "option_c": "...",
+        "option_d": "...",
+        "correct_answer": "a",
+        "explanation": "..."
+    }}
+]
 
-5. Explanation mandatory.
+17. Do NOT use:
+    - options
+    - answer
+    - choices
+    - correctOption
 
-6. Return ONLY valid JSON.
+18. correct_answer must contain ONLY:
+    a
+    b
+    c
+    d
 
-7. No markdown.
-
-8. No comments.
-
-9. No numbering.
-
-10. Mix theoretical and scenario-based questions.
+Return ONLY the JSON array.
 """
-
 
 def call_gemini(prompt: str):
 
@@ -153,51 +180,109 @@ def call_gemini(prompt: str):
 
             text = response.text.strip()
 
+            print("=" * 80)
+            print("RAW GEMINI RESPONSE:")
+            print(text)
+            print("=" * 80)
+
             if text.startswith("```"):
 
                 text = text.replace("```json", "")
-
                 text = text.replace("```", "")
 
             return text
 
         except Exception as e:
 
+            print("Gemini Error:", e)
             last_error = e
-
             time.sleep(2)
 
     raise Exception(last_error)
 
 
 
-
 def parse_questions(text: str):
 
-    try:
+    # ---------------------------------------
+    # Parse JSON
+    # ---------------------------------------
 
-        questions = json.loads(text)
+    try:
+        data = json.loads(text)
 
     except Exception:
 
-        raise Exception("Gemini returned invalid JSON.")
+        raise Exception(
+            f"Gemini returned invalid JSON.\n\n{text}"
+        )
 
-    if not isinstance(questions, list):
+    # ---------------------------------------
+    # Convert response to flat list
+    # ---------------------------------------
 
-        raise Exception("Gemini should return a list.")
+    questions = []
 
-    required = {
+    if isinstance(data, list):
 
-        "level",
-        "question",
-        "option_a",
-        "option_b",
-        "option_c",
-        "option_d",
-        "correct_answer",
-        "explanation"
+        questions = data
 
-    }
+    elif isinstance(data, dict):
+
+        # Case 1
+        if "questions" in data:
+
+            questions = data["questions"]
+
+        # Case 2
+        elif "mcqs" in data:
+
+            questions = data["mcqs"]
+
+        # Case 3
+        elif "data" in data:
+
+            questions = data["data"]
+
+        # Case 4
+        elif any(
+            key in data
+            for key in [
+                "beginner",
+                "intermediate",
+                "advanced"
+            ]
+        ):
+
+            for level in [
+
+                "beginner",
+                "intermediate",
+                "advanced"
+
+            ]:
+
+                for q in data.get(level, []):
+
+                    q["level"] = level
+
+                    questions.append(q)
+
+        else:
+
+            raise Exception(
+                f"Unknown Gemini JSON format.\n\n{data}"
+            )
+
+    else:
+
+        raise Exception(
+            "Gemini response is neither object nor list."
+        )
+
+    # ---------------------------------------
+    # Validation
+    # ---------------------------------------
 
     cleaned = []
 
@@ -205,10 +290,70 @@ def parse_questions(text: str):
 
     for q in questions:
 
+        # -----------------------------------
+        # Convert options[] → option_a...
+        # -----------------------------------
+
+        if "options" in q:
+
+            opts = q["options"]
+
+            if len(opts) == 4:
+
+                q["option_a"] = re.sub(
+                    r"^[A-D][.)]\s*",
+                    "",
+                    opts[0]
+                ).strip()
+
+                q["option_b"] = re.sub(
+                    r"^[A-D][.)]\s*",
+                    "",
+                    opts[1]
+                ).strip()
+
+                q["option_c"] = re.sub(
+                    r"^[A-D][.)]\s*",
+                    "",
+                    opts[2]
+                ).strip()
+
+                q["option_d"] = re.sub(
+                    r"^[A-D][.)]\s*",
+                    "",
+                    opts[3]
+                ).strip()
+
+        # -----------------------------------
+        # answer -> correct_answer
+        # -----------------------------------
+
+        if "answer" in q and "correct_answer" not in q:
+
+            q["correct_answer"] = q["answer"]
+
+        required = {
+
+            "level",
+            "question",
+            "option_a",
+            "option_b",
+            "option_c",
+            "option_d",
+            "correct_answer",
+            "explanation"
+
+        }
+
         if not required.issubset(q.keys()):
+
             continue
 
-        level = q["level"].lower().strip()
+        level = str(
+
+            q["level"]
+
+        ).strip().lower()
 
         if level not in [
 
@@ -222,43 +367,44 @@ def parse_questions(text: str):
 
             continue
 
-        answer = q["correct_answer"].lower()
+        answer = str(
+
+            q["correct_answer"]
+
+        ).strip().lower()
+
+        answer = answer.replace(".", "")
+
+        answer = answer.replace(")", "")
 
         if answer not in [
 
             "a",
-
             "b",
-
             "c",
-
             "d"
 
         ]:
 
             continue
 
-        duplicate = (
+        question = q["question"].strip()
 
-            q["question"]
-
-            .strip()
-
-            .lower()
-
-        )
-
-        if duplicate in seen:
+        if question.lower() in seen:
 
             continue
 
-        seen.add(duplicate)
+        seen.add(
+
+            question.lower()
+
+        )
 
         cleaned.append({
 
             "level": level,
 
-            "question": q["question"].strip(),
+            "question": question,
 
             "option_a": q["option_a"].strip(),
 
@@ -274,32 +420,31 @@ def parse_questions(text: str):
 
         })
 
+    if len(cleaned) == 0:
+
+        raise Exception(
+
+            "Gemini returned no valid questions."
+
+        )
+
     return cleaned
 
+
 def generate_questions(
-
     topic_id: int,
-
     topic_name: str,
-
     beginner: int,
-
     intermediate: int,
-
-    advanced: int
-
+    advanced: int,
+    created_by: int
 ):
 
     prompt = build_prompt(
-
         topic_name,
-
         beginner,
-
         intermediate,
-
         advanced
-
     )
 
     response = call_gemini(prompt)
@@ -307,7 +452,8 @@ def generate_questions(
     questions = parse_questions(response)
 
     for question in questions:
-
         question["topic_id"] = topic_id
+        question["source"] = "ai"
+        question["created_by"] = created_by
 
     return questions

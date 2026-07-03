@@ -278,19 +278,19 @@ def get_questions(
 
     if topic_name:
 
-      topic = db.exec(
-        select(Topic).where(
-            Topic.name.ilike(topic_name)
-        )
-    ).first()
+        topic = db.exec(
+            select(Topic).where(
+                Topic.name.ilike(topic_name)
+            )
+        ).first()
 
-    if not topic:
-        raise HTTPException(
-            status_code=404,
-            detail="Topic not found"
-        )
+        if not topic:
+            raise HTTPException(
+                status_code=404,
+                detail="Topic not found"
+            )
 
-    topic_id = topic.id
+        topic_id = topic.id
 
     # =====================================
     # Build Query
@@ -299,15 +299,13 @@ def get_questions(
     query = select(Question)
 
     if topic_id:
-
         query = query.where(
             Question.topic_id == topic_id
         )
 
     if level:
-
         query = query.where(
-            Question.level == level
+            Question.level == level.lower()
         )
 
     # =====================================
@@ -391,205 +389,111 @@ def delete_question(
 # ==========================================
 
 def get_random_questions(
-
     db: Session,
-
     topic_id: int | None = None,
-
     topic_name: str | None = None
-
 ):
 
-
- if not topic_id and not topic_name:
-
-    raise HTTPException(
-        status_code=400,
-        detail="Provide topic_id or topic_name."
-    )
-
- if topic_name:
-
-    topic = db.exec(
-        select(Topic).where(
-            Topic.name.ilike(topic_name)
-        )
-    ).first()
-
-    if not topic:
+    if not topic_id and not topic_name:
         raise HTTPException(
-            status_code=404,
-            detail="Topic not found."
+            status_code=400,
+            detail="Provide topic_id or topic_name."
         )
 
-    topic_id = topic.id
-    
+    # Resolve topic name only if provided
+    if topic_name:
+        topic = db.exec(
+            select(Topic).where(
+                Topic.name.ilike(topic_name)
+            )
+        ).first()
+
+        if not topic:
+            raise HTTPException(
+                status_code=404,
+                detail="Topic not found."
+            )
+
+        topic_id = topic.id
+
+    # -----------------------------
+    # BELOW THIS LINE MUST NOT BE INSIDE if topic_name
+    # -----------------------------
+
     REQUIRED = {
-
         "beginner": 2,
-
         "intermediate": 3,
-
         "advanced": 5
-
     }
 
     selected = []
-
     used_ids = set()
 
-    # --------------------------------------
-    # Helper
-    # --------------------------------------
-
     def fetch(level):
-
         questions = db.exec(
-
             select(Question).where(
-
                 Question.topic_id == topic_id,
-
                 Question.level == level,
-
                 Question.is_active == True
-
             )
-
         ).all()
 
         random.shuffle(questions)
-
         return questions
 
     beginner = fetch("beginner")
-
     intermediate = fetch("intermediate")
-
     advanced = fetch("advanced")
 
     pools = {
-
         "beginner": beginner,
-
         "intermediate": intermediate,
-
         "advanced": advanced
-
     }
-
-    # --------------------------------------
-    # First Pass
-    # --------------------------------------
 
     remaining = {}
 
     for level, required in REQUIRED.items():
-
         available = pools[level]
-
         take = min(required, len(available))
-
         remaining[level] = required - take
 
         for q in available[:take]:
-
             selected.append(q)
-
             used_ids.add(q.id)
 
-    # --------------------------------------
-    # Fallback
-    # --------------------------------------
-
     if remaining["advanced"] > 0:
-
-        extra = [
-
-            q for q in intermediate
-
-            if q.id not in used_ids
-
-        ]
-
-        take = min(
-
-            remaining["advanced"],
-
-            len(extra)
-
-        )
+        extra = [q for q in intermediate if q.id not in used_ids]
+        take = min(remaining["advanced"], len(extra))
 
         for q in extra[:take]:
-
             selected.append(q)
-
             used_ids.add(q.id)
 
         remaining["advanced"] -= take
 
     if remaining["advanced"] > 0:
-
-        extra = [
-
-            q for q in beginner
-
-            if q.id not in used_ids
-
-        ]
-
-        take = min(
-
-            remaining["advanced"],
-
-            len(extra)
-
-        )
+        extra = [q for q in beginner if q.id not in used_ids]
+        take = min(remaining["advanced"], len(extra))
 
         for q in extra[:take]:
-
             selected.append(q)
-
             used_ids.add(q.id)
 
         remaining["advanced"] -= take
 
     if remaining["intermediate"] > 0:
-
-        extra = [
-
-            q for q in beginner
-
-            if q.id not in used_ids
-
-        ]
-
-        take = min(
-
-            remaining["intermediate"],
-
-            len(extra)
-
-        )
+        extra = [q for q in beginner if q.id not in used_ids]
+        take = min(remaining["intermediate"], len(extra))
 
         for q in extra[:take]:
-
             selected.append(q)
-
             used_ids.add(q.id)
 
-    # --------------------------------------
-    # Final Validation
-    # --------------------------------------
-
     if len(selected) < 10:
-
         raise HTTPException(
-
             status_code=400,
-
             detail="Not enough questions available."
-
         )
 
     random.shuffle(selected)

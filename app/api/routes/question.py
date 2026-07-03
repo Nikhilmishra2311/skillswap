@@ -68,13 +68,9 @@ def create_question_api(
         require_admin(current_user)
 
         return create_question(
-
-    db,
-
-    data,
-
-    current_user.id
-
+    db=db,
+    data=data,
+    created_by=current_user.id
 )
 
     except Exception as e:
@@ -356,29 +352,51 @@ def generate_ai_questions(
 
         )
 
-    questions = generate_questions(
+    try:
 
-        topic.id,
+        questions = generate_questions(
 
-        topic.name,
+            topic_id=request.topic_id,
 
-        request.beginner_count,
+            topic_name=topic.name,
 
-        request.intermediate_count,
+            beginner=request.beginner_count,
 
-        request.advanced_count
+            intermediate=request.intermediate_count,
 
-    )
+            advanced=request.advanced_count,
 
-    return {
+            created_by=current_user.id
 
-        "topic": topic.name,
+        )
 
-        "total": len(questions),
+        result = bulk_save_questions(
 
-        "questions": questions
+            db=db,
 
-    }
+            questions=questions
+
+        )
+
+        return {
+
+            "message": "Questions generated successfully.",
+
+            "inserted": result["inserted"],
+
+            "duplicates": result["duplicates"]
+
+        }
+
+    except Exception as e:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail=str(e)
+
+        )
 # ==========================================
 # Save AI Questions
 # ==========================================

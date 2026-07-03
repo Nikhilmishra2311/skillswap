@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     # ==========================================
     # Pydantic Settings
     # ==========================================
-
+    VERIFICATION_PASS_PERCENTAGE: float = 60.0
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore"
