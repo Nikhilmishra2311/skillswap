@@ -4,7 +4,7 @@ from app.models.user import User
 from app.models.token_transaction import TokenTransaction
 from app.models.user_skill import UserSkill
 from app.models.topic import Topic 
-from datetime import datetime, timezone
+from datetime import datetime
 from app.models.availability import AvailabilitySlot
 from app.tasks.notification_tasks import send_notification_task
 from app.tasks.email_tasks import (
@@ -28,13 +28,10 @@ def create_session(
     # Cannot create session in past
     # =====================================
 
-    now = datetime.now(timezone.utc)
-
-    if start_time.tzinfo is None:
-        start_time = start_time.replace(tzinfo=timezone.utc)
+    now = datetime.now()
 
     if start_time <= now:
-       raise Exception("Start time must be in the future.")
+        raise Exception("Start time must be in the future.")
 
     # =====================================
     # Availability Validation
@@ -165,10 +162,9 @@ def get_available_sessions(
 
     # =====================================
     # Auto Expire Old Sessions
-    # (Later this will be moved to Celery)
     # =====================================
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now()
 
     open_sessions = db.exec(
         select(Session).where(
@@ -209,7 +205,7 @@ def get_available_sessions(
         topic_id = topic.id
 
     # =====================================
-    # Fetch Available Sessions
+    # Fetch Sessions
     # =====================================
 
     query = select(Session).where(
@@ -224,10 +220,6 @@ def get_available_sessions(
         )
 
     sessions = db.exec(query).all()
-
-    # =====================================
-    # Sort by Start Time
-    # =====================================
 
     sessions.sort(
         key=lambda session: session.start_time
@@ -391,10 +383,6 @@ def start_session(
     user_id: int
 ):
 
-    # =====================================
-    # Fetch Session
-    # =====================================
-
     session = db.get(
         Session,
         session_id
@@ -405,42 +393,25 @@ def start_session(
             "Session not found."
         )
 
-    # =====================================
-    # Authorization
-    # =====================================
-
     if session.tutor_id != user_id:
         raise Exception(
             "Only the tutor can start this session."
         )
-
-    # =====================================
-    # Status Validation
-    # =====================================
 
     if session.status != "booked":
         raise Exception(
             "Session is not ready to start."
         )
 
-    # =====================================
-    # Time Validation
-    # =====================================
+    now = datetime.now()
 
-    now = datetime.now(timezone.utc)
+    print("NOW :", now)
+    print("SESSION :", session.start_time)
 
-    session_time = session.start_time
-    if session_time.tzinfo is None:
-       session_time = session_time.replace(tzinfo=timezone.utc)
-
-    if now < session_time:
+    if now < session.start_time:
         raise Exception(
-        "You cannot start the session before its scheduled time."
-    )
-
-    # =====================================
-    # Start Session
-    # =====================================
+            "You cannot start the session before its scheduled time."
+        )
 
     session.status = "ongoing"
 
