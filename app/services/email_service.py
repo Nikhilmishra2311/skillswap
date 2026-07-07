@@ -140,14 +140,11 @@ def send_reset_password_email(
 def send_session_booked_email(
 
     email: str,
-
     receiver_name: str,
-
     other_person: str,
-
     topic: str,
-
-    session_time: str
+    session_time: str,
+    meeting_link: str
 
 ):
 
@@ -175,7 +172,17 @@ has been booked successfully.
 </p>
 
 <p>
-Thank you for using SkillSwap.
+<b>Meeting Link :</b>
+</p>
+
+<p>
+<a href="{meeting_link}">
+{meeting_link}
+</a>
+</p>
+
+<p>
+Click the above link at the scheduled time to join the video session.
 </p>
 
 </body>
@@ -188,7 +195,6 @@ Thank you for using SkillSwap.
         "Session Booked",
         body
     )
-
 
 # ==========================================
 # Session Completed
@@ -249,12 +255,10 @@ Keep learning on SkillSwap 🚀
 def send_session_reminder_email(
 
     email: str,
-
     receiver_name: str,
-
     topic: str,
-
-    session_time: str
+    session_time: str,
+    meeting_link: str
 
 ):
 
@@ -268,16 +272,22 @@ def send_session_reminder_email(
 <p>Hello <b>{receiver_name}</b>,</p>
 
 <p>
-Your
-<b>{topic}</b>
-session starts at
-
-<b>{session_time}</b>
-
+Your <b>{topic}</b> session starts at
+<b>{session_time}</b>.
 </p>
 
 <p>
-Please join on time.
+<b>Join Meeting</b>
+</p>
+
+<p>
+<a href="{meeting_link}">
+{meeting_link}
+</a>
+</p>
+
+<p>
+Please join 5 minutes before the session starts.
 </p>
 
 </body>
@@ -290,8 +300,6 @@ Please join on time.
         "Session Reminder",
         body
     )
-
-
 # ==========================================
 # Tutor Verification
 # ==========================================

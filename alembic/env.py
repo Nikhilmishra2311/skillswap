@@ -45,9 +45,16 @@ import app.models.learner_profile
 config = context.config
 
 # Read DATABASE_URL from .env
+database_url = settings.DATABASE_URL
+
+# Agar Alembic Windows/local se chal raha hai,
+# to Docker hostname "postgres" ko localhost se replace kar do.
+if os.environ.get("RUNNING_IN_DOCKER") != "true":
+    database_url = database_url.replace("@postgres:", "@localhost:")
+
 config.set_main_option(
     "sqlalchemy.url",
-    settings.DATABASE_URL
+    database_url
 )
 
 # --------------------------------------------------

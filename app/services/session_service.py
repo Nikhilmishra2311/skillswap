@@ -4,7 +4,7 @@ from app.models.user import User
 from app.models.token_transaction import TokenTransaction
 from app.models.user_skill import UserSkill
 from app.models.topic import Topic 
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.models.availability import AvailabilitySlot
 from app.tasks.notification_tasks import send_notification_task
 from app.tasks.email_tasks import (
@@ -12,6 +12,7 @@ from app.tasks.email_tasks import (
     session_completed_email_task,
     session_reminder_email_task
 )
+from app.services.jitsi_service import generate_meeting
 
 
 TOKEN_PER_SESSION = 10
@@ -58,10 +59,9 @@ def create_session(
         "%H:%M"
     ).time()
 
-    is_available = False
+    selected_slot = None
 
     for slot in availability_slots:
-
         slot_start = datetime.strptime(
             slot.start_time,
             "%H:%M"
@@ -73,10 +73,10 @@ def create_session(
         ).time()
 
         if slot_start <= requested_time <= slot_end:
-            is_available = True
+            selected_slot = slot
             break
 
-    if not is_available:
+    if not selected_slot:
         raise Exception(
             "You are not available at this time."
         )
@@ -128,6 +128,7 @@ def create_session(
     session = Session(
         tutor_id=tutor_id,
         topic_id=topic_id,
+        availability_slot_id=selected_slot.id,
         start_time=start_time,
         status="open"
     )
@@ -138,10 +139,7 @@ def create_session(
 
     db.refresh(session)
 
-    # =====================================
-    # Notification
-    # =====================================
-
+    
     send_notification_task.delay(
         tutor_id,
         "Session Created",
@@ -321,6 +319,18 @@ def book_session(
     session.learner_id = learner_id
 
     session.status = "booked"
+           # =====================================
+           # Generate Meeting
+           # =====================================
+
+    meeting_details = generate_meeting(
+        session_id=session.id,
+        tutor_id=session.tutor_id,
+        learner_id=learner_id
+    )
+    session.meeting_room_id = meeting_details.room_id
+    session.meeting_room = meeting_details.room_name
+    session.meeting_link = meeting_details.meeting_link
 
     db.add(session)
 
@@ -360,7 +370,8 @@ def book_session(
             tutor.full_name,
             learner.full_name,
             topic.name,
-            formatted_time
+            formatted_time,
+            session.meeting_link
         )
 
     if learner and topic:
@@ -369,12 +380,27 @@ def book_session(
             learner.full_name,
             tutor.full_name,
             topic.name,
-            formatted_time
+            formatted_time,
+            session.meeting_link
+        )
+
+    if tutor and topic:
+        session_reminder_email_task.delay(
+            tutor.email,
+            tutor.full_name,
+            topic.name,
+            formatted_time,
+            session.meeting_link
         )
 
    
 
-    return session
+    return {
+    "message": "Session booked successfully.",
+    "session_id": session.id,
+    "meeting_link": session.meeting_link,
+    "meeting_room": session.meeting_room
+}
 
 
 def start_session(
@@ -413,6 +439,11 @@ def start_session(
             "You cannot start the session before its scheduled time."
         )
 
+    if not session.meeting_link:
+        raise Exception(
+            "Meeting link not found."
+        )
+
     session.status = "ongoing"
 
     db.add(session)
@@ -435,7 +466,12 @@ def start_session(
         "session_started"
     )
 
-    return session
+    return {
+        "message": "Session Started",
+        "meeting_link": session.meeting_link,
+        "room_name": session.meeting_room,
+        "room_id": session.meeting_room_id
+    }
 
 def complete_session(
     db: DBSession,
@@ -536,6 +572,11 @@ def complete_session(
     # =====================================
 
     session.status = "completed"
+    session.meeting_link=None
+
+    session.meeting_room=None
+
+    session.meeting_room_id=None
 
     db.add(session)
     db.add(learner)
@@ -675,6 +716,11 @@ def cancel_session(
     # =====================================
 
     session.status = "cancelled"
+    session.meeting_link=None
+
+    session.meeting_room=None
+
+    session.meeting_room_id=None
 
     db.add(session)
 
@@ -976,5 +1022,202 @@ def get_session_details(
 
         "start_time":
         session.start_time
+
+    }
+
+from datetime import datetime
+
+
+def get_meeting(
+    db: DBSession,
+    session_id: int,
+    user_id: int
+):
+
+    session = db.get(Session, session_id)
+
+    if not session:
+        raise Exception("Session not found.")
+
+    # Only tutor or learner
+
+    if user_id not in [
+        session.tutor_id,
+        session.learner_id
+    ]:
+        raise Exception(
+            "You are not allowed to join this meeting."
+        )
+
+    if session.status not in [
+        "booked",
+        "ongoing"
+    ]:
+        raise Exception(
+            "Meeting is not available."
+        )
+
+    if not session.meeting_link:
+        raise Exception(
+            "Meeting has not been generated."
+        )
+
+    # Availability Validation
+
+    slot = db.get(
+        AvailabilitySlot,
+        session.availability_slot_id
+    )
+
+    if slot:
+
+        end_datetime = datetime.combine(
+            session.start_time.date(),
+            datetime.strptime(
+                slot.end_time,
+                "%H:%M"
+            ).time()
+        )
+
+        if datetime.now() > end_datetime:
+
+            raise Exception(
+                "Meeting link has expired."
+            )
+
+    return {
+
+        "session_id": session.id,
+
+        "room_id": session.meeting_room_id,
+
+        "room_name": session.meeting_room,
+
+        "meeting_link": session.meeting_link,
+
+        "status": session.status
+    }
+
+
+def join_session(
+
+    db: DBSession,
+
+    session_id: int,
+
+    user_id: int
+
+):
+
+    # =====================================
+    # Fetch Session
+    # =====================================
+
+    session = db.get(Session, session_id)
+
+    if not session:
+        raise Exception(
+            "Session not found."
+        )
+
+    # =====================================
+    # Authorization
+    # =====================================
+
+    if user_id not in [
+        session.tutor_id,
+        session.learner_id
+    ]:
+        raise Exception(
+            "You are not allowed to join this session."
+        )
+
+    # =====================================
+    # Status Validation
+    # =====================================
+
+    if session.status not in [
+        "booked",
+        "ongoing"
+    ]:
+        raise Exception(
+            "Session cannot be joined."
+        )
+
+    # =====================================
+    # Join Window
+    # Allow joining only
+    # 10 min before session
+    # =====================================
+
+    now = datetime.utcnow()
+
+    join_time = session.start_time - timedelta(
+        minutes=10
+    )
+
+    if now < join_time:
+
+        remaining = int(
+            (join_time - now).total_seconds() // 60
+        )
+
+        raise Exception(
+            f"You can join only 10 minutes before the session starts. "
+            f"Please wait {remaining} minute(s)."
+        )
+
+    # =====================================
+    # Auto Expire
+    # 2 hours after start
+    # =====================================
+
+    expire_time = session.start_time + timedelta(
+        hours=2
+    )
+
+    if now >= expire_time:
+
+        session.status = "expired"
+
+        db.add(session)
+
+        db.commit()
+
+        raise Exception(
+            "This session has expired."
+        )
+
+    # =====================================
+    # Mark Ongoing
+    # =====================================
+
+    if session.status == "booked":
+
+        session.status = "ongoing"
+
+        db.add(session)
+
+        db.commit()
+
+        db.refresh(session)
+
+    # =====================================
+    # Response
+    # =====================================
+
+    return {
+
+        "message": "Join session successfully.",
+
+        "session_id": session.id,
+
+        "meeting_room": session.meeting_room,
+
+        "meeting_link": session.meeting_link,
+
+        "status": session.status,
+
+        "starts_at": session.start_time
 
     }

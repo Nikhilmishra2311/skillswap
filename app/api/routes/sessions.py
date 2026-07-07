@@ -2,6 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.models.session import Session
 from sqlmodel import Session as DBSession, select
 from datetime import datetime
+from fastapi import Depends
+
+from app.api.deps import get_current_user
+from app.db.session import get_session
+from app.models.user import User
 from app.models.topic import Topic  # 🔥 NEW
 from app.services.session_service import (
     complete_session,
@@ -13,7 +18,8 @@ from app.services.session_service import (
     get_my_created_sessions,
     get_my_booked_sessions,
     get_session_history,
-    get_session_details
+    get_session_details,
+    get_meeting
 )
 
 from app.db.session import get_session
@@ -99,9 +105,13 @@ def create_session_api(
         )
 
     except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+
         raise HTTPException(
             status_code=400,
-            detail=str(e)
+            detail=f"{type(e).__name__}: {e!r}"
         )
 
 
@@ -124,7 +134,26 @@ def start_session_api(
             detail=str(e)
         )
 
+@router.get("/{session_id}/meeting")
+def meeting_api(
+    session_id: int,
+    db: DBSession = Depends(get_session),
+    current_user=Depends(get_current_user)
+):
+    try:
 
+        return get_meeting(
+            db,
+            session_id,
+            current_user.id
+        )
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
 @router.get("/available")
 def available_sessions(
     topic_id: int | None = None,
@@ -250,7 +279,22 @@ def my_booked_sessions_api(
         db,
         current_user.id
     )
+@router.get("/{session_id}/join")
+def join_session(
 
+    session_id: int,
+
+    db: DBSession = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+
+):
+
+    return session_service.join_session(
+        db=db,
+        session_id=session_id,
+        user_id=current_user.id
+
+    )
 # =====================================
 # Session History
 # =====================================

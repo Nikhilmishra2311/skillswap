@@ -161,11 +161,11 @@ def session_completed_email_task(
 
 @celery.task(bind=True, max_retries=3)
 def session_reminder_email_task(
-    self,
-    email: str,
-    receiver_name: str,
-    topic: str,
-    session_time: str
+    email,
+    name,
+    topic,
+    session_time,
+    meeting_link
 ):
 
     try:
@@ -174,9 +174,10 @@ def session_reminder_email_task(
 
         send_session_reminder_email(
             email,
-            receiver_name,
+            name,
             topic,
-            session_time
+            session_time,
+            meeting_link
         )
 
         print("Reminder Email Sent")

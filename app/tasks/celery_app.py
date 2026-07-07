@@ -63,16 +63,16 @@ celery.conf.update(
         },
 
         # ==========================================
-        # Every Day 2 AM
+        # Every Day 3 AM
         # ==========================================
 
-        "cleanup-expired-sessions":{
+        "cleanup-old-sessions":{
 
             "task":"app.tasks.session_tasks.cleanup_old_sessions",
 
             "schedule":crontab(
 
-                hour=2,
+                hour=3,
 
                 minute=0
 

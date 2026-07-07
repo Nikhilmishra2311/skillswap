@@ -11,6 +11,9 @@ from app.api.deps import get_current_user
 from app.schemas.availability import (
     AvailabilityCreate
 )
+from app.schemas.availability import UpdateAvailability
+
+from app.services.availability_service import update_availability
 
 from app.services.availability_service import (
     create_availability,
@@ -71,6 +74,32 @@ def tutor_availability(
         db,
         user_id
     )
+
+@router.put("/{availability_id}")
+def update_availability_api(
+
+    availability_id: int,
+
+    data: UpdateAvailability,
+
+    db: Session = Depends(get_session),
+
+    current_user=Depends(get_current_user)
+
+):
+
+    return update_availability(
+
+        db,
+
+        availability_id,
+
+        current_user.id,
+
+        data
+    )
+
+
 @router.delete("/{slot_id}")
 def remove_slot(
     slot_id: int,
