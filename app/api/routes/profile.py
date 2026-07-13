@@ -40,8 +40,11 @@ from app.services.learner_profile_service import (
     update_learner_profile
 )
 
-import os
-import uuid
+from app.services.storage_service import (
+    upload_image,
+    delete_file,
+    get_file_url
+)
 
 
 router = APIRouter(
@@ -115,28 +118,25 @@ async def update_my_profile(
 
     if photo:
 
-        os.makedirs(
-            "uploads/profile_pictures",
-            exist_ok=True
+      profile = get_my_profile(
+        db,
+        current_user.id
+    )
+
+    if profile.profile_picture:
+        delete_file(
+            profile.profile_picture
         )
 
-        extension = photo.filename.split(".")[-1]
+    object_name = upload_image(
 
-        filename = f"{uuid.uuid4()}.{extension}"
+        file=photo,
 
-        filepath = (
-            f"uploads/profile_pictures/{filename}"
-        )
+        folder="profile-images"
 
-        with open(filepath, "wb") as buffer:
+    )
 
-            buffer.write(
-                await photo.read()
-            )
-
-        profile_picture = (
-            f"/media/profile_pictures/{filename}"
-        )
+    profile_picture = object_name
 
     data = ProfileUpdate(
 

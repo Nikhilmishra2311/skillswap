@@ -2,7 +2,7 @@ from sqlmodel import Session, select
 
 from app.models.profile import Profile
 
-
+from app.services.storage_service import get_file_url
 def get_my_profile(
     db: Session,
     user_id: int
@@ -17,7 +17,14 @@ def get_my_profile(
     if not profile:
         raise Exception("Profile not found")
 
+    if profile.profile_picture:
+
+        profile.profile_picture = get_file_url(
+            profile.profile_picture
+        )
+
     return profile
+
 
 
 def get_profile_by_user_id(
@@ -33,6 +40,12 @@ def get_profile_by_user_id(
 
     if not profile:
         raise Exception("Profile not found")
+
+    if profile.profile_picture:
+
+        profile.profile_picture = get_file_url(
+            profile.profile_picture
+        )
 
     return profile
 
@@ -68,5 +81,9 @@ def update_profile(
     db.commit()
 
     db.refresh(profile)
+    if profile.profile_picture:
 
+      profile.profile_picture = get_file_url(
+        profile.profile_picture
+    )
     return profile

@@ -1,6 +1,6 @@
 import os
 from fastapi.middleware.cors import CORSMiddleware
-
+from app.core.minio import initialize_bucket
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -20,6 +20,9 @@ app = FastAPI(
     redoc_url="/redoc"
 
 )
+@app.on_event("startup")
+def startup_event():
+    initialize_bucket()
 app.add_middleware(
 
     CORSMiddleware,
