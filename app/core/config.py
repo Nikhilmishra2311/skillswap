@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # ==========================================
 
     REDIS_URL: str
+    REDIS_HOST: str
+    REDIS_PORT: int
+    CACHE_EXPIRE: int = 600
 
     # ==========================================
     # Celery

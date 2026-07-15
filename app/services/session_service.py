@@ -1,5 +1,5 @@
 from sqlmodel import Session as DBSession, select
-from sqlachemy import or_
+from sqlalchemy import or_
 from app.models.session import Session
 from app.models.user import User
 from app.models.token_transaction import TokenTransaction
@@ -13,6 +13,14 @@ from app.tasks.email_tasks import (
     session_completed_email_task,
     session_reminder_email_task
 )
+from app.services.cache_service import (
+    get_cache,
+    set_cache,
+    delete_cache,
+    delete_pattern
+)
+
+from app.core.cache import redis_client
 from app.services.jitsi_service import generate_meeting
 
 from math import ceil
@@ -138,6 +146,9 @@ def create_session(
     db.add(session)
 
     db.commit()
+    delete_pattern(
+    "available_sessions:*"
+         )
 
     db.refresh(session)
 
@@ -155,12 +166,38 @@ def create_session(
 
 
 def get_available_sessions(
+
     db: DBSession,
+
     topic_id: int | None = None,
+
     topic_name: str | None = None,
+
     page: int = 1,
+
     size: int = 10
+
 ):
+
+    # =====================================
+    # Cache Key
+    # =====================================
+
+    cache_key = (
+        f"available_sessions:"
+        f"{topic_id}:"
+        f"{topic_name}:"
+        f"{page}:"
+        f"{size}"
+    )
+
+    cached = get_cache(cache_key)
+
+    if cached:
+
+        print("✅ Available Sessions fetched from Redis")
+
+        return cached
 
     # =====================================
     # Auto Expire Old Sessions
@@ -202,7 +239,22 @@ def get_available_sessions(
         ).first()
 
         if not topic:
-            return []
+
+            response = {
+                "page": page,
+                "size": size,
+                "total": 0,
+                "total_pages": 0,
+                "items": []
+            }
+
+            set_cache(
+                cache_key,
+                response,
+                expire=120
+            )
+
+            return response
 
         topic_id = topic.id
 
@@ -211,8 +263,11 @@ def get_available_sessions(
     # =====================================
 
     query = select(Session).where(
+
         Session.status == "open",
+
         Session.start_time > now
+
     )
 
     if topic_id:
@@ -221,7 +276,9 @@ def get_available_sessions(
             Session.topic_id == topic_id
         )
 
-    query = query.order_by(Session.start_time)
+    query = query.order_by(
+        Session.start_time
+    )
 
     total = len(
         db.exec(query).all()
@@ -230,10 +287,8 @@ def get_available_sessions(
     offset = (page - 1) * size
 
     sessions = db.exec(
-        query
-        .offset(offset)
-        .limit(size)
-).all()
+        query.offset(offset).limit(size)
+    ).all()
 
     result = []
 
@@ -267,19 +322,35 @@ def get_available_sessions(
 
         })
 
-    return {
+    response = {
 
-    "page": page,
+        "page": page,
 
-    "size": size,
+        "size": size,
 
-    "total": total,
+        "total": total,
 
-    "total_pages": ceil(total / size) if total else 0,
+        "total_pages": ceil(total / size) if total else 0,
 
-    "items": result
+        "items": result
 
-}
+    }
+
+    # =====================================
+    # Save Cache
+    # =====================================
+
+    set_cache(
+
+        cache_key,
+
+        response,
+
+        expire=120
+
+    )
+
+    return response
 
 def book_session(
     db: DBSession,
@@ -359,7 +430,9 @@ def book_session(
     db.add(session)
 
     db.commit()
-
+    delete_pattern(
+    "available_sessions:*"
+         )
     db.refresh(session)
 
     # =====================================
@@ -473,7 +546,9 @@ def start_session(
     db.add(session)
 
     db.commit()
-
+    delete_pattern(
+    "available_sessions:*"
+            )
     db.refresh(session)
 
     send_notification_task.delay(
@@ -611,7 +686,7 @@ def complete_session(
     # =====================================
 
     db.commit()
-
+    delete_pattern("available_sessions:*")
     db.refresh(session)
     db.refresh(learner)
     db.refresh(tutor)
@@ -753,6 +828,7 @@ def cancel_session(
     # =====================================
 
     db.commit()
+    delete_pattern("available_sessions:*")
 
     db.refresh(session)
 
@@ -1243,6 +1319,7 @@ def join_session(
 
         db.commit()
 
+
         raise Exception(
             "This session has expired."
         )
@@ -1258,6 +1335,7 @@ def join_session(
         db.add(session)
 
         db.commit()
+        delete_pattern("available_sessions:*")
 
         db.refresh(session)
 
