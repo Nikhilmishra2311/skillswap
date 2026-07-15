@@ -6,7 +6,8 @@ from fastapi import (
     File,
     Form
 )
-
+from fastapi import Request
+from app.core.limiter import limiter
 from sqlmodel import Session
 
 from app.db.session import get_session
@@ -53,7 +54,9 @@ router = APIRouter(
 )
 
 @router.get("/me")
+@limiter.limit("10/minute")
 def my_profile(
+    request: Request,
     db: Session = Depends(get_session),
     current_user=Depends(get_current_user)
 ):
@@ -75,7 +78,9 @@ def my_profile(
 
 
 @router.get("/{user_id}")
+@limiter.limit("10/minute")
 def public_profile(
+    request: Request,
     user_id: int,
     db: Session = Depends(get_session)
 ):
@@ -95,8 +100,9 @@ def public_profile(
         )   
     
 @router.put("/me")
+@limiter.limit("10/minute")
 async def update_my_profile(
-
+    request: Request,
     full_name: str | None = Form(None),
     headline: str | None = Form(None),
     bio: str | None = Form(None),
@@ -118,25 +124,26 @@ async def update_my_profile(
 
     if photo:
 
-      profile = get_my_profile(
+        profile = get_my_profile(
         db,
         current_user.id
-    )
+        )
 
-    if profile.profile_picture:
-        delete_file(
+        if profile.profile_picture:
+
+           delete_file(
             profile.profile_picture
         )
 
-    object_name = upload_image(
+        object_name = upload_image(
 
         file=photo,
 
         folder="profile-images"
 
-    )
+        )
 
-    profile_picture = object_name
+        profile_picture = object_name
 
     data = ProfileUpdate(
 
@@ -163,8 +170,9 @@ async def update_my_profile(
 
 
 @router.post("/tutor")
+@limiter.limit("10/minute")
 def create_tutor(
-
+    request: Request,
     data: TutorProfileCreate,
 
     db: Session = Depends(get_session),
@@ -198,8 +206,10 @@ def tutor_profile(
     )
 
 @router.put("/tutor")
+@limiter.limit("10/minute")
 def update_tutor(
 
+    request: Request,
     data: TutorProfileUpdate,
 
     db: Session = Depends(get_session),
@@ -217,7 +227,9 @@ def update_tutor(
     )
 
 @router.post("/learner")
+@limiter.limit("10/minute")
 def create_learner(
+    request: Request,
 
     data: LearnerProfileCreate,
 
@@ -251,8 +263,10 @@ def learner_profile(
 
     )
 @router.put("/learner")
+@limiter.limit("10/minute")
 def update_learner(
 
+    request: Request,
     data: LearnerProfileUpdate,
 
     db: Session = Depends(get_session),

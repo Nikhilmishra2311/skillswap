@@ -1,7 +1,7 @@
 from fastapi import APIRouter
-from fastapi import Depends
+from fastapi import Depends,Request
 from fastapi import HTTPException
-
+from app.core.limiter import limiter
 from sqlmodel import Session
 
 from app.db.session import get_session
@@ -29,7 +29,9 @@ router = APIRouter(
 
 
 @router.post("/")
+@limiter.limit("20/minute")
 def add_slot(
+    request: Request,
     data: AvailabilityCreate,
     db: Session = Depends(get_session),
     current_user=Depends(get_current_user)
@@ -54,7 +56,9 @@ def add_slot(
 
 
 @router.get("/me")
+@limiter.limit("60/minute")
 def my_slots(
+    request: Request,
     db: Session = Depends(get_session),
     current_user=Depends(get_current_user)
 ):
@@ -65,7 +69,9 @@ def my_slots(
     )
 
 @router.get("/user/{user_id}")
+@limiter.limit("60/minute")
 def tutor_availability(
+    request: Request,
     user_id: int,
     db: Session = Depends(get_session)
 ):
@@ -76,8 +82,10 @@ def tutor_availability(
     )
 
 @router.put("/{availability_id}")
+@limiter.limit("30/minute")
 def update_availability_api(
 
+    request: Request,
     availability_id: int,
 
     data: UpdateAvailability,
@@ -101,7 +109,9 @@ def update_availability_api(
 
 
 @router.delete("/{slot_id}")
+@limiter.limit("20/minute")
 def remove_slot(
+    request: Request,
     slot_id: int,
     db: Session = Depends(get_session),
     current_user=Depends(get_current_user)

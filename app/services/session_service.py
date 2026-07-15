@@ -1,4 +1,5 @@
 from sqlmodel import Session as DBSession, select
+from sqlachemy import or_
 from app.models.session import Session
 from app.models.user import User
 from app.models.token_transaction import TokenTransaction
@@ -14,6 +15,7 @@ from app.tasks.email_tasks import (
 )
 from app.services.jitsi_service import generate_meeting
 
+from math import ceil
 
 TOKEN_PER_SESSION = 10
 
@@ -155,7 +157,9 @@ def create_session(
 def get_available_sessions(
     db: DBSession,
     topic_id: int | None = None,
-    topic_name: str | None = None
+    topic_name: str | None = None,
+    page: int = 1,
+    size: int = 10
 ):
 
     # =====================================
@@ -217,11 +221,19 @@ def get_available_sessions(
             Session.topic_id == topic_id
         )
 
-    sessions = db.exec(query).all()
+    query = query.order_by(Session.start_time)
 
-    sessions.sort(
-        key=lambda session: session.start_time
+    total = len(
+        db.exec(query).all()
     )
+
+    offset = (page - 1) * size
+
+    sessions = db.exec(
+        query
+        .offset(offset)
+        .limit(size)
+).all()
 
     result = []
 
@@ -255,7 +267,19 @@ def get_available_sessions(
 
         })
 
-    return result
+    return {
+
+    "page": page,
+
+    "size": size,
+
+    "total": total,
+
+    "total_pages": ceil(total / size) if total else 0,
+
+    "items": result
+
+}
 
 def book_session(
     db: DBSession,
@@ -787,18 +811,35 @@ def cancel_session(
 
     }
 def get_my_created_sessions(
+
     db: DBSession,
-    tutor_id: int
+
+    tutor_id: int,
+
+    page: int = 1,
+
+    size: int = 10
+
 ):
 
+    query = (
+
+        select(Session)
+
+        .where(Session.tutor_id == tutor_id)
+
+        .order_by(Session.start_time.desc())
+
+    )
+
+    total = len(
+        db.exec(query).all()
+    )
+
+    offset = (page - 1) * size
+
     sessions = db.exec(
-
-        select(Session).where(
-            Session.tutor_id == tutor_id
-        ).order_by(
-            Session.start_time.desc()
-        )
-
+        query.offset(offset).limit(size)
     ).all()
 
     result = []
@@ -808,147 +849,165 @@ def get_my_created_sessions(
         learner = None
 
         if session.learner_id:
+            learner = db.get(User, session.learner_id)
 
-            learner = db.get(
-                User,
-                session.learner_id
-            )
-
-        topic = db.get(
-            Topic,
-            session.topic_id
-        )
+        topic = db.get(Topic, session.topic_id)
 
         result.append({
 
             "session_id": session.id,
-
             "topic": topic.name if topic else None,
-
-            "learner_id":
-            learner.id if learner else None,
-
-            "learner_email":
-            learner.email if learner else None,
-
+            "learner_id": learner.id if learner else None,
+            "learner_email": learner.email if learner else None,
             "status": session.status,
-
             "start_time": session.start_time
 
         })
 
-    return result
+    return {
+
+        "page": page,
+        "size": size,
+        "total": total,
+        "total_pages": ceil(total / size) if total else 0,
+        "items": result
+
+    }
 def get_my_booked_sessions(
+
     db: DBSession,
-    learner_id: int
+
+    learner_id: int,
+
+    page: int = 1,
+
+    size: int = 10
+
 ):
 
+    query = (
+
+        select(Session)
+
+        .where(Session.learner_id == learner_id)
+
+        .order_by(Session.start_time.desc())
+
+    )
+
+    total = len(
+        db.exec(query).all()
+    )
+
+    offset = (page - 1) * size
+
     sessions = db.exec(
-
-        select(Session).where(
-            Session.learner_id == learner_id
-        ).order_by(
-            Session.start_time.desc()
-        )
-
+        query.offset(offset).limit(size)
     ).all()
 
     result = []
 
     for session in sessions:
 
-        tutor = db.get(
-            User,
-            session.tutor_id
-        )
+        tutor = db.get(User, session.tutor_id)
 
-        topic = db.get(
-            Topic,
-            session.topic_id
-        )
+        topic = db.get(Topic, session.topic_id)
 
         result.append({
 
             "session_id": session.id,
-
             "topic": topic.name if topic else None,
-
-            "tutor_id":
-            tutor.id if tutor else None,
-
-            "tutor_email":
-            tutor.email if tutor else None,
-
+            "tutor_id": tutor.id if tutor else None,
+            "tutor_email": tutor.email if tutor else None,
             "status": session.status,
-
             "start_time": session.start_time
 
         })
 
-    return result
+    return {
+
+        "page": page,
+        "size": size,
+        "total": total,
+        "total_pages": ceil(total / size) if total else 0,
+        "items": result
+
+    }
 def get_session_history(
+
     db: DBSession,
-    user_id: int
+
+    user_id: int,
+
+    page: int = 1,
+
+    size: int = 10
+
 ):
 
-    sessions = db.exec(
+    query = (
 
-        select(Session).where(
+        select(Session)
 
-            (Session.tutor_id == user_id)
+        .where(
 
-            |
+            or_(
 
-            (Session.learner_id == user_id)
+                Session.tutor_id == user_id,
 
-        ).order_by(
-            Session.start_time.desc()
+                Session.learner_id == user_id
+
+            )
+
         )
 
+        .order_by(Session.start_time.desc())
+
+    )
+
+    total = len(
+        db.exec(query).all()
+    )
+
+    offset = (page - 1) * size
+
+    sessions = db.exec(
+        query.offset(offset).limit(size)
     ).all()
 
     result = []
 
     for session in sessions:
 
-        tutor = db.get(
-            User,
-            session.tutor_id
-        )
+        tutor = db.get(User, session.tutor_id)
 
         learner = None
 
         if session.learner_id:
+            learner = db.get(User, session.learner_id)
 
-            learner = db.get(
-                User,
-                session.learner_id
-            )
-
-        topic = db.get(
-            Topic,
-            session.topic_id
-        )
+        topic = db.get(Topic, session.topic_id)
 
         result.append({
 
             "session_id": session.id,
-
             "topic": topic.name if topic else None,
-
-            "tutor_email":
-            tutor.email if tutor else None,
-
-            "learner_email":
-            learner.email if learner else None,
-
+            "tutor_email": tutor.email if tutor else None,
+            "learner_email": learner.email if learner else None,
             "status": session.status,
-
             "start_time": session.start_time
 
         })
 
-    return result
+    return {
+
+        "page": page,
+        "size": size,
+        "total": total,
+        "total_pages": ceil(total / size) if total else 0,
+        "items": result
+
+    }
 def get_session_details(
     db: DBSession,
     session_id: int

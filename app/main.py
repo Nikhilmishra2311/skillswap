@@ -3,7 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.minio import initialize_bucket
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi import _rate_limit_exceeded_handler
 
+from app.core.limiter import limiter
 from app.api.router import api_router
 from app.db.init_db import init_db
 
@@ -20,9 +24,19 @@ app = FastAPI(
     redoc_url="/redoc"
 
 )
-@app.on_event("startup")
-def startup_event():
-    initialize_bucket()
+
+app.state.limiter = limiter
+
+app.add_exception_handler(
+    RateLimitExceeded,
+    _rate_limit_exceeded_handler
+)
+
+app.add_middleware(
+    SlowAPIMiddleware
+)
+
+
 app.add_middleware(
 
     CORSMiddleware,
@@ -40,20 +54,19 @@ app.add_middleware(
 
 
 @app.on_event("startup")
-def on_startup():
+def startup():
+    initialize_bucket()
     init_db()
-
-# Ensure upload folder exists before mounting static files
-os.makedirs("uploads", exist_ok=True)
 
 app.include_router(api_router)
 
 @app.get("/")
 def root():
-    return {"message": "SkillSwap Running 🚀"}
+    return {
+        "message": "Hello,Welcome to SkillSwap a best platform for skill exchange.You can exchange skills with other users. 🚀"
+        }
 
-app.mount(
-    "/media",
-    StaticFiles(directory="uploads"),
-    name="media"
-)
+
+
+
+

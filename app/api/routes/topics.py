@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends,Request
+from app.core.limiter import limiter
 from sqlmodel import Session, select
 from app.db.session import get_session
 from app.schemas.topic import TopicCreate
@@ -10,11 +11,13 @@ router = APIRouter(prefix="/topics", tags=["Topics"])
 
 # 🔥 Create topic
 @router.post("/")
-def create(topic: TopicCreate, db: Session = Depends(get_session)):
+@limiter.limit("100/minute")
+def create(request: Request, topic: TopicCreate, db: Session = Depends(get_session)):
     return create_topic(db, topic.name)
 
 
 # 🔥 Get all topics
 @router.get("/")   # ✅ FIXED
-def get_topics(db: Session = Depends(get_session)):
+@limiter.limit("60/minute")
+def get_topics(request: Request, db: Session = Depends(get_session)):
     return db.exec(select(Topic)).all()

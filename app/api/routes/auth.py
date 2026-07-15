@@ -1,4 +1,7 @@
 import token
+from fastapi import Request
+
+from app.core.limiter import limiter
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
@@ -31,9 +34,15 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # 🔐 Register
 @router.post("/register", response_model=Token)
+@limiter.limit("3/minute")
 def register(
+
+    request: Request,
+
     user_data: UserCreate,
+
     db: Session = Depends(get_session)
+
 ):
 
     try:
@@ -73,58 +82,122 @@ def register(
 
 # 🔐 Login
 @router.post("/login", response_model=Token)
-def login(user_data: UserLogin, db: Session = Depends(get_session)):
-    user = authenticate_user(db, user_data.email, user_data.password)
+@limiter.limit("5/minute")
+def login(
+
+    request: Request,
+
+    user_data: UserLogin,
+
+    db: Session = Depends(get_session)
+
+):
+
+    user = authenticate_user(
+        db,
+        user_data.email,
+        user_data.password
+    )
 
     if not user:
-        raise HTTPException(status_code=400, detail="Invalid credentials")
 
-    token = create_access_token({"sub": str(user.id)})
-    return {"access_token": token, "token_type": "bearer"}
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid credentials"
+        )
 
+    token = create_access_token(
+        {"sub": str(user.id)}
+    )
+
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
 
 # 🔐 Change Password (logged-in)
 @router.post("/change-password")
+@limiter.limit("5/minute")
 def change_password(
-    data: ChangePassword,
-    db: Session = Depends(get_session),
-    current_user = Depends(get_current_user)
-):
-    if not verify_password(data.old_password, current_user.password):
-        raise HTTPException(status_code=400, detail="Incorrect old password")
 
-    current_user.password = get_password_hash(data.new_password)
+    request: Request,
+
+    data: ChangePassword,
+
+    db: Session = Depends(get_session),
+
+    current_user=Depends(get_current_user)
+
+):
+
+    if not verify_password(
+        data.old_password,
+        current_user.password
+    ):
+
+        raise HTTPException(
+            status_code=400,
+            detail="Incorrect old password"
+        )
+
+    current_user.password = get_password_hash(
+        data.new_password
+    )
 
     db.add(current_user)
+
     db.commit()
 
-    return {"message": "Password updated successfully"}
+    return {
+        "message": "Password updated successfully"
+    }
 
 
 # 🔑 Forgot Password (generate token)
 @router.post("/forgot-password")
-def forgot_password(email: str, db: Session = Depends(get_session)):
-    user = get_user_by_email(db, email)
+@limiter.limit("3/15minutes")
+def forgot_password(
+
+    request: Request,
+
+    email: str,
+
+    db: Session = Depends(get_session)
+
+):
+
+    user = get_user_by_email(
+        db,
+        email
+    )
 
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+
+        raise HTTPException(
+            status_code=404,
+            detail="User not found"
+        )
 
     token = create_reset_token(email)
 
-    # In production → send email
     reset_password_email_task.delay(
-    email,
-    token
-)
+        email,
+        token
+    )
 
     return {
-    "message":"Password reset email sent."
-}
+        "message": "Password reset email sent."
+    }
 
 
 # 🔑 Reset Password
 @router.post("/reset-password")
-def reset_password(data: ResetPassword, db: Session = Depends(get_session)):
+@limiter.limit("5/minutes")
+def reset_password(
+    request: Request,
+    data: ResetPassword,
+    db: Session = Depends(get_session)
+):
     email = verify_reset_token(data.token)
 
     if not email:

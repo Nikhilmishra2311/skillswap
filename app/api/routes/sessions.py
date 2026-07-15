@@ -3,7 +3,8 @@ from app.models.session import Session
 from sqlmodel import Session as DBSession, select
 from datetime import datetime
 from fastapi import Depends
-
+from fastapi import Request
+from app.core.limiter import limiter
 from app.api.deps import get_current_user
 from app.db.session import get_session
 from app.models.user import User
@@ -39,7 +40,9 @@ router = APIRouter(
 
 # 🔥 Tutor creates session
 @router.post("/create")
+@limiter.limit("10/minute")
 def create_session_api(
+    request: Request,
     data: CreateSession,
     db: DBSession = Depends(get_session),
     current_user=Depends(get_current_user)
@@ -116,7 +119,9 @@ def create_session_api(
 
 
 @router.post("/start/{session_id}")
+@limiter.limit("10/minute")
 def start_session_api(
+    request: Request,
     session_id: int,
     db: DBSession = Depends(get_session),
     current_user=Depends(get_current_user)
@@ -135,7 +140,9 @@ def start_session_api(
         )
 
 @router.get("/{session_id}/meeting")
+@limiter.limit("20/minute")
 def meeting_api(
+    request: Request,
     session_id: int,
     db: DBSession = Depends(get_session),
     current_user=Depends(get_current_user)
@@ -155,21 +162,43 @@ def meeting_api(
             detail=str(e)
         )
 @router.get("/available")
+@limiter.limit("100/minute")
 def available_sessions(
+
+    request: Request,
+
+    page: int = 1,
+
+    size: int = 10,
+
     topic_id: int | None = None,
+
     topic_name: str | None = None,
+
     db: DBSession = Depends(get_session)
+
 ):
+
     return get_available_sessions(
-        db,
-        topic_id,
-        topic_name
+
+        db=db,
+
+        topic_id=topic_id,
+
+        topic_name=topic_name,
+
+        page=page,
+
+        size=size
+
     )
 
 
 # 🔥 Learner books session
 @router.post("/book/{session_id}")
+@limiter.limit("10/minute")
 def book_session_api(
+    request: Request,
     session_id: int,
     db: DBSession = Depends(get_session),
     current_user=Depends(get_current_user)
@@ -204,7 +233,9 @@ def book_session_api(
 
 
 @router.post("/complete/{session_id}")
+@limiter.limit("10/minute")
 def complete_session_api(
+    request: Request,
     session_id: int,
     db: DBSession = Depends(get_session),
     current_user=Depends(get_current_user)
@@ -229,7 +260,9 @@ def complete_session_api(
 # =====================================
 
 @router.post("/cancel/{session_id}")
+@limiter.limit("10/minute")
 def cancel_session_api(
+    request: Request,
     session_id: int,
     db: DBSession = Depends(get_session),
     current_user=Depends(get_current_user)
@@ -255,14 +288,31 @@ def cancel_session_api(
 # =====================================
 
 @router.get("/my-created")
+@limiter.limit("30/minute")
 def my_created_sessions_api(
+
+    request: Request,
+
+    page: int = 1,
+
+    size: int = 10,
+
     db: DBSession = Depends(get_session),
+
     current_user=Depends(get_current_user)
+
 ):
 
     return get_my_created_sessions(
-        db,
-        current_user.id
+
+        db=db,
+
+        tutor_id=current_user.id,
+
+        page=page,
+
+        size=size
+
     )
 
 # =====================================
@@ -270,18 +320,37 @@ def my_created_sessions_api(
 # =====================================
 
 @router.get("/my-booked")
+@limiter.limit("30/minute")
 def my_booked_sessions_api(
+
+    request: Request,
+
+    page: int = 1,
+
+    size: int = 10,
+
     db: DBSession = Depends(get_session),
+
     current_user=Depends(get_current_user)
+
 ):
 
     return get_my_booked_sessions(
-        db,
-        current_user.id
+
+        db=db,
+
+        learner_id=current_user.id,
+
+        page=page,
+
+        size=size
+
     )
 @router.get("/{session_id}/join")
+@limiter.limit("60/minute")
 def join_session(
 
+    request: Request,
     session_id: int,
 
     db: DBSession = Depends(get_session),
@@ -300,14 +369,31 @@ def join_session(
 # =====================================
 
 @router.get("/history")
+@limiter.limit("30/minute")
 def session_history_api(
+
+    request: Request,
+
+    page: int = 1,
+
+    size: int = 10,
+
     db: DBSession = Depends(get_session),
+
     current_user=Depends(get_current_user)
+
 ):
 
     return get_session_history(
-        db,
-        current_user.id
+
+        db=db,
+
+        user_id=current_user.id,
+
+        page=page,
+
+        size=size
+
     )
 
 # =====================================
@@ -315,7 +401,9 @@ def session_history_api(
 # =====================================
 
 @router.get("/{session_id}")
+@limiter.limit("50/minute")
 def session_details_api(
+    request: Request,
     session_id: int,
     db: DBSession = Depends(get_session),
     current_user=Depends(get_current_user)
